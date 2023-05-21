@@ -1,8 +1,37 @@
+pub trait Mem {
+    fn mem_read(&self, address: u16) -> u8;
+    fn mem_write(&mut self, address: u16, data: u8);
+
+    fn mem_read_u16(&mut self, address: u16) -> u16 {
+        let lo = self.mem_read(address) as u16;
+        let hi = self.mem_read(address + 1) as u16;
+        (hi << 8) | (lo as u16)
+    }
+
+    fn mem_write_u16(&mut self, address: u16, data: u16) {
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xFF) as u8;
+        self.mem_write(address, lo);
+        self.mem_write(address + 1, hi);
+    }
+}
+
+impl Mem for CPU {
+    fn mem_read(&self, address: u16) -> u8 {
+        self.memory[address as usize]
+    }
+
+    fn mem_write(&mut self, address: u16, data: u8) {
+        self.memory[address as usize] = data;
+    }
+}
+
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
     pub status: u8,
     pub program_counter: u16,
+    memory: [u8; 0xFFFF],
 }
 
 impl CPU {
@@ -12,6 +41,37 @@ impl CPU {
             register_x: 0,
             status: 0,
             program_counter: 0,
+            memory: [0; 0xFFFF],
+        }
+    }
+
+    pub fn load_and_run(&mut self, program: Vec<u8>) {
+        self.load(program);
+        self.run();
+    }
+
+    pub fn load(&mut self, program: Vec<u8>) {
+        self.memory[0x8000..(0x8000 + program.len())].copy_from_slice(&program[..]);
+        self.program_counter = 0x8000;
+    }
+
+    pub fn run(&mut self) {
+        loop {
+            let opcode = self.mem_read(self.program_counter);
+            self.program_counter += 1;
+
+            match opcode {
+                0x00 => return,
+                0xA9 => {
+                    let param = self.mem_read(self.program_counter);
+                    self.program_counter += 1;
+
+                    self.lda(param);
+                }
+                0xAA => self.tax(),
+                0xE8 => self.inx(),
+                _ => todo!(),
+            }
         }
     }
 
